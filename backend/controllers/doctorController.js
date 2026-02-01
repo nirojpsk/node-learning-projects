@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Doctor from "../models/doctor.js";
 import User from "../models/user.js";
+import Appointment from "../models/appointment.js";
 
 //A. CREATE DOCTOR PROFILE [DOCTOR]
 
@@ -367,6 +368,118 @@ const deleteDoctorProfile = async (req, res) => {
   }
 };
 
+//K. ADD REVIEW [PATIENT]
+
+const addReview = async (req, res) => {
+  try {
+    const doctorId = req.params.id;
+    const { rating, comment } = req.body;
+
+    //only the patient can add reviews
+    if (req.user.role !== "patient") {
+      return res.status(403).send({
+        message: "Only patients are allowed to review",
+      });
+    }
+
+    //validate doctorId
+    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
+      return res.status(400).send({
+        message: "Invalid doctor id",
+      });
+    }
+    // check if doctor exists
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).send({
+        message: "Doctor not found",
+      });
+    }
+    //to check if the patient has booked an appointment with the doctor
+    const appointment = await Appointment.findOne({
+      patientId: req.user._id,
+      doctorId: req.params.id,
+      status: "completed",
+    });
+    if (!appointment) {
+      return res.status(403).send({
+        message: "You can only review after a completed appointment",
+      });
+    }
+
+    //check if review already exists
+    const reviewExists = doctor.reviews.find(
+      (r) => r.userId.toString() === req.user._id.toString(),
+    );
+    if (reviewExists) {
+      return res.status(400).send({
+        message: "You have already reviewed this doctor",
+      });
+    }
+
+    if (!rating) {
+      return res.status(400).send({
+        message: "Please provide rating",
+      });
+    }
+    if (rating < 1 || rating > 5) {
+      return res.status(400).send({
+        message: "Rating must be between 1 and 5",
+      });
+    }
+
+    doctor.reviews.push({
+      userId: req.user._id,
+      rating,
+      comment,
+    });
+    await doctor.save();
+    res.status(200).send({
+      message: "Review added successfully",
+    });
+  } catch (err) {
+    res.status(500).send({
+      message: "Error while adding review",
+      error: err.message,
+    });
+  }
+};
+
+//L. GET ALL REVIEWS [DOCTOR]
+
+const getMyReviews = async (req, res) => {
+  try {
+    if (req.user.role !== "doctor") {
+      return res.status(403).send({
+        message: "Unauthorized",
+      });
+    }
+    const doctor = await Doctor.findOne({ userId: req.user._id }).populate(
+      "reviews.userId",
+      "name profilePicture",
+    );
+    if (!doctor) {
+      return res.status(404).send({
+        message: "Doctor not found",
+      });
+    }
+    res.status(200).send({
+      message:
+        doctor.reviews.length === 0
+          ? "No reviews yet"
+          : "Reviews fetched successfully",
+      totalReviews: doctor.totalReviews,
+      averageRating: doctor.averageRating,
+      reviews: doctor.reviews,
+    });
+  } catch (err) {
+    res.status(500).send({
+      message: "Error while fetching reviews",
+      error: err.message,
+    });
+  }
+};
+
 export {
   createDoctorProfile,
   getDoctorById,
@@ -377,4 +490,6 @@ export {
   updateDoctorProfile,
   getMyDoctorProfile,
   deleteDoctorProfile,
+  addReview,
+  getMyReviews,
 };

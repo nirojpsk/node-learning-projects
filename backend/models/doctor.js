@@ -1,5 +1,28 @@
 import mongoose from "mongoose";
 
+const reviewSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    required: true,
+  },
+  comment: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
 const timeRangeSchema = new mongoose.Schema(
   {
     start: {
@@ -113,9 +136,27 @@ const doctorSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    reviews: [reviewSchema],
+    averageRating: {
+      type: Number,
+      default: 0,
+    },
+    totalReviews: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true },
 );
+
+doctorSchema.pre("save", function () {
+  if (this.reviews.length > 0) {
+    this.totalReviews = this.reviews.length;
+    this.averageRating =
+      (this.reviews.reduce((acc, review) => acc + review.rating, 0) /
+      this.reviews.length).toFixed(2);
+  }
+});
 
 const Doctor = mongoose.model("Doctor", doctorSchema);
 
